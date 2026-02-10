@@ -1,4 +1,3 @@
-import { constants as fsConstants } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -50,6 +49,7 @@ import {
   resolveScopeDecision,
   resolveTimeoutMs,
 } from "./resolve.js";
+import { fileExists, hasBinary } from "./runner-binary.js";
 import { estimateBase64Size, resolveVideoMaxBase64Bytes } from "./video.js";
 
 export type ActiveMediaModel = {
@@ -78,115 +78,7 @@ export function createMediaAttachmentCache(attachments: MediaAttachment[]): Medi
   return new MediaAttachmentCache(attachments);
 }
 
-const binaryCache = new Map<string, Promise<string | null>>();
 const geminiProbeCache = new Map<string, Promise<boolean>>();
-
-function expandHomeDir(value: string): string {
-  if (!value.startsWith("~")) {
-    return value;
-  }
-  const home = os.homedir();
-  if (value === "~") {
-    return home;
-  }
-  if (value.startsWith("~/")) {
-    return path.join(home, value.slice(2));
-  }
-  return value;
-}
-
-function hasPathSeparator(value: string): boolean {
-  return value.includes("/") || value.includes("\\");
-}
-
-function candidateBinaryNames(name: string): string[] {
-  if (process.platform !== "win32") {
-    return [name];
-  }
-  const ext = path.extname(name);
-  if (ext) {
-    return [name];
-  }
-  const pathext = (process.env.PATHEXT ?? ".EXE;.CMD;.BAT;.COM")
-    .split(";")
-    .map((item) => item.trim())
-    .filter(Boolean)
-    .map((item) => (item.startsWith(".") ? item : `.${item}`));
-  const unique = Array.from(new Set(pathext));
-  return [name, ...unique.map((item) => `${name}${item}`)];
-}
-
-async function isExecutable(filePath: string): Promise<boolean> {
-  try {
-    const stat = await fs.stat(filePath);
-    if (!stat.isFile()) {
-      return false;
-    }
-    if (process.platform === "win32") {
-      return true;
-    }
-    await fs.access(filePath, fsConstants.X_OK);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
-async function findBinary(name: string): Promise<string | null> {
-  const cached = binaryCache.get(name);
-  if (cached) {
-    return cached;
-  }
-  const resolved = (async () => {
-    const direct = expandHomeDir(name.trim());
-    if (direct && hasPathSeparator(direct)) {
-      for (const candidate of candidateBinaryNames(direct)) {
-        if (await isExecutable(candidate)) {
-          return candidate;
-        }
-      }
-    }
-
-    const searchName = name.trim();
-    if (!searchName) {
-      return null;
-    }
-    const pathEntries = (process.env.PATH ?? "").split(path.delimiter);
-    const candidates = candidateBinaryNames(searchName);
-    for (const entryRaw of pathEntries) {
-      const entry = expandHomeDir(entryRaw.trim().replace(/^"(.*)"$/, "$1"));
-      if (!entry) {
-        continue;
-      }
-      for (const candidate of candidates) {
-        const fullPath = path.join(entry, candidate);
-        if (await isExecutable(fullPath)) {
-          return fullPath;
-        }
-      }
-    }
-
-    return null;
-  })();
-  binaryCache.set(name, resolved);
-  return resolved;
-}
-
-async function hasBinary(name: string): Promise<boolean> {
-  return Boolean(await findBinary(name));
-}
-
-async function fileExists(filePath?: string | null): Promise<boolean> {
-  if (!filePath) {
-    return false;
-  }
-  try {
-    await fs.stat(filePath);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function extractLastJsonObject(raw: string): unknown {
   const trimmed = raw.trim();
