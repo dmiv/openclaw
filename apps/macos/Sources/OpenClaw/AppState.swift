@@ -422,11 +422,10 @@ final class AppState {
         let trimmedUser = parsed.user?.trimmingCharacters(in: .whitespacesAndNewlines)
         let user = (trimmedUser?.isEmpty ?? true) ? nil : trimmedUser
         let port = parsed.port
-        let assembled: String
-        if let user {
-            assembled = port == 22 ? "\(user)@\(host)" : "\(user)@\(host):\(port)"
+        let assembled: String = if let user {
+            port == 22 ? "\(user)@\(host)" : "\(user)@\(host):\(port)"
         } else {
-            assembled = port == 22 ? host : "\(host):\(port)"
+            port == 22 ? host : "\(host):\(port)"
         }
         if assembled != self.remoteTarget {
             self.remoteTarget = assembled
@@ -471,11 +470,10 @@ final class AppState {
 
             if connectionMode == .remote {
                 var remote = gateway["remote"] as? [String: Any] ?? [:]
-                let remoteChanged: Bool
-                if remoteTransport == .direct {
-                    remoteChanged = Self.syncDirectTransportRemote(&remote, url: remoteUrl)
+                let remoteChanged: Bool = if remoteTransport == .direct {
+                    Self.syncDirectTransportRemote(&remote, url: remoteUrl)
                 } else {
-                    remoteChanged = Self.syncSSHTransportRemote(
+                    Self.syncSSHTransportRemote(
                         &remote, target: remoteTarget, identity: remoteIdentity, host: remoteHost)
                 }
                 if remoteChanged {
@@ -517,8 +515,8 @@ final class AppState {
     }
 
     private static func syncSSHTransportRemote(
-        _ remote: inout [String: Any], target: String, identity: String, host: String?
-    ) -> Bool {
+        _ remote: inout [String: Any], target: String, identity: String, host: String?) -> Bool
+    {
         var changed = false
         if remote["transport"] != nil {
             remote.removeValue(forKey: "transport")
@@ -537,7 +535,7 @@ final class AppState {
             }
         }
 
-        let sanitizedTarget = sanitizeSSHTarget(target)
+        let sanitizedTarget = self.sanitizeSSHTarget(target)
         if !sanitizedTarget.isEmpty {
             if (remote["sshTarget"] as? String) != sanitizedTarget {
                 remote["sshTarget"] = sanitizedTarget
@@ -710,7 +708,9 @@ extension AppState {
 @MainActor
 enum AppStateStore {
     static let shared = AppState()
-    static var isPausedFlag: Bool { UserDefaults.standard.bool(forKey: pauseDefaultsKey) }
+    static var isPausedFlag: Bool {
+        UserDefaults.standard.bool(forKey: pauseDefaultsKey)
+    }
 
     static func updateLaunchAtLogin(enabled: Bool) {
         Task.detached(priority: .utility) {
